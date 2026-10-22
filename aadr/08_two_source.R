@@ -41,7 +41,7 @@
 # NOTE: z=garbage from step 7 does NOT apply to weights here: there the weight
 # was fixed=1 (1 source), so se=0. Here weights are properly estimated => z is meaningful.
 #
-# Usage (from a writable directory, e.g. ~/Claude):
+# Usage (from a writable directory, e.g. the repository root):
 #   Rscript aadr/08_two_source.R \
 #     ./FF_PW/merged_pw_aadr_final_ready \
 #     /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB \
@@ -250,6 +250,24 @@ if (length(extra_needed) == 0L) {
                  paste0(extra_stem, ".fam"),
     "--make-bed", "--out", ext_prefix
   ))
+  miss <- paste0(ext_prefix, "-merge.missnp")
+  if (ret != 0L && file.exists(miss)) {
+    # A target allele that disagrees with the AADR pair (array miscall, not a
+    # strand flip: A/C vs T/C) aborts --bmerge with "3+ alleles". Drop those
+    # SNPs from both sides and merge again -- same rule as step 3d.
+    cat(sprintf("  %d allele conflict(s) excluded, merging again\n", length(readLines(miss))))
+    for (p in c(merged_prefix, extra_stem)) {
+      ret <- system2("plink2", c("--bfile", p, "--exclude", miss, "--make-bed",
+                                 "--out", paste0(ext_prefix, "_x", basename(p))))
+      if (ret != 0L) stop("plink2 --exclude failed for 2src")
+    }
+    xb <- paste0(ext_prefix, "_x", basename(extra_stem))
+    ret <- system2("p-link", c(
+      "--bfile",   paste0(ext_prefix, "_x", basename(merged_prefix)),
+      "--bmerge",  paste0(xb, c(".bed", ".bim", ".fam")),
+      "--make-bed", "--out", ext_prefix
+    ))
+  }
   if (ret != 0L) stop("p-link --bmerge failed for 2src")
 
   # Fix FID: individual IDs -> population labels

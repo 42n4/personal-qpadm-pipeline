@@ -8,7 +8,7 @@
 #   - How deep in time does the explanation reach (proximal vs distal)?
 #
 # Populations tested as LEFT (source):
-#   Proximal:  Poland_IA (n=130, Polish Iron Age = Lusatian horizon in Poland),
+#   Proximal:  Poland_IA (n=130; label says Iron Age but 128/130 are 900-1200 CE Piast-era burials),
 #              Poland_IA_Wielbark, Poland_Roman_Wielbark,
 #              Poland_EarlyMedieval_Slav, Poland_EarlySlav,
 #              Poland_BA_Trzciniec, Poland_CordedWare, Poland_GlobularAmphora
@@ -61,7 +61,7 @@ right_pops <- c("Mbuti", "Yoruba", "Han")
 # Poland_IA_Wielbark, Poland_EarlyMedieval_Slav -- already in file from step 2
 # Poland_GlobularAmphora -- Poland GAC (Globular Amphora Culture)
 new_pops <- c(
-  "Poland_IA",                   # n=130, Polish Iron Age aggregate (Lusatian horizon)
+  "Poland_IA",                   # n=130, MEDIEVAL 900-1200 CE despite the label (Stolarek 2023)
   "Poland_EarlySlav",
   "Poland_Roman_Wielbark",
   "Poland_BA_Trzciniec",

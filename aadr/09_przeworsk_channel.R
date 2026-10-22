@@ -3,7 +3,7 @@
 # 09_przeworsk_channel.R -- Przeworsk vs Wielbark "channel of descent" test
 #
 # HYPOTHESIS (user, 2026-06-29):
-#   PW has a medieval Greater-Poland (Wielkopolska) genealogical background.
+#   Question for a target with a medieval Greater-Poland (Wielkopolska) background.
 #   The line of descent from the Iron Age Lusatian substrate may have run
 #   through the PRZEWORSK culture (central/southern Poland, autochthonous,
 #   Slavic-substrate channel) rather than the WIELBARK culture (Pomeranian,
@@ -33,7 +33,7 @@
 #             Z < -3     : PW shares more drift with Wielbark   (Wielbark channel)
 #     (B3) f4(Mbuti, PW; Sweden_IA, Przeworsk/Wielbark) -- Scandinavian affinity ctx
 #
-# Usage (run from ~/Claude or any writable dir):
+# Usage (run from the repository root or any writable dir):
 #   Rscript aadr/09_przeworsk_channel.R \
 #     ./PW_FF/merged_pw_aadr_final_ready \
 #     /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB \
