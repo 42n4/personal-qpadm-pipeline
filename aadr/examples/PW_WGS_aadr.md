@@ -1,5 +1,9 @@
 # PW — 30x WGS vs AADR v66.p1 (2026-10-21)
 
+> **Continued in `PW_WGS_aadr_gretzinger.md`** (2026-10-23): set 5 (south-eastern
+> candidates), set 6 (Gretzinger et al. 2025 Migration/Slavic-period genomes) and a
+> PCA with those 590 individuals projected.
+
 First results on **correctly decoded** AADR genotypes. All June 2026 AADR results
 were computed on TGENO files that admixtools mis-decoded and are superseded — see
 "TGENO" in `../../CLAUDE.md`; the consumer-array reruns are in `PW_JW_arrays_aadr.md`.

@@ -67,12 +67,66 @@ def read_anno(path: str) -> dict:
     return out
 
 
+def read_plink(prefix: str, snp_index: dict, a1: list, a2: list, nsnp: int):
+    """Every individual of a PLINK1 bed/bim/fam, as rows of 0/1/2/3 in the panel's
+    a1 convention (3 = missing). FID is the label.
+
+    .bed is SNP-major: 3 magic bytes, then ceil(nind/4) bytes per SNP, 2 bits per
+    sample, LSB first. PLINK codes copies of its OWN A1 (.bim col 5) as
+    00=2, 10=1, 11=0, 01=missing -- so the pair is re-checked against the panel
+    and flipped (or complemented) per SNP rather than trusted.
+    """
+    fam = [l.split() for l in open(prefix + ".fam")]
+    labels = [r[0] for r in fam]            # FID = population, Poseidon convention
+    nind = len(fam)
+    bim = [l.split() for l in open(prefix + ".bim")]
+    with open(prefix + ".bed", "rb") as f:
+        magic = f.read(3)
+        if magic != b"\x6c\x1b\x01":
+            die(f"{prefix}.bed is not PLINK1 SNP-major (magic {magic!r})")
+        raw = np.frombuffer(f.read(), dtype=np.uint8)
+    bps = math.ceil(nind / 4)
+    if raw.size != bps * len(bim):
+        die(f"{prefix}.bed size does not match .bim/.fam")
+    raw = raw.reshape(len(bim), bps)
+
+    out = np.full((nind, nsnp), 3, np.int8)
+    # PLINK 2-bit code -> copies of PLINK's A1; index is the raw code 0..3
+    code = np.array([2, 3, 1, 0], np.int8)
+    used = flips = bad = 0
+    for k, r in enumerate(bim):
+        j = snp_index.get(r[1])
+        if j is None:
+            continue
+        x, y = r[4], r[5]                   # PLINK A1, A2
+        pair = {a1[j], a2[j]}
+        if not {x, y} <= pair | {"0"}:
+            x, y = COMP.get(x, "?"), COMP.get(y, "?")
+            if not {x, y} <= pair | {"0"}:
+                bad += 1
+                continue
+            flips += 1
+        bits = np.unpackbits(raw[k], bitorder="little").reshape(-1, 2)[:nind]
+        g = code[bits[:, 0] + 2 * bits[:, 1]]
+        # g counts PLINK's A1; the panel counts a1[j]
+        if x != a1[j]:
+            g = np.where(g == 3, 3, 2 - g).astype(np.int8)
+        out[:, j] = g
+        used += 1
+    print(f"extra {os.path.basename(prefix)}: {nind} individuals, {used} panel SNPs "
+          f"(flipped {flips}, unmatched {bad})")
+    return labels, out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--prefix", required=True)
     ap.add_argument("--anno", required=True)
     ap.add_argument("--target", action="append", default=[], help="LABEL=ped/map stem")
     ap.add_argument("--relabel", default="", help="TSV IID<TAB>label overriding AADR groups")
+    ap.add_argument("--extra-plink", action="append", default=[],
+                    help="PLINK bed/bim/fam prefix; every individual is projected, FID = label. "
+                         "Repeatable. Written for Poseidon packages (e.g. 2025_Gretzinger_SlavicPeriod).")
     ap.add_argument("--cap", type=int, default=20)
     ap.add_argument("--min-snps", type=int, default=15000, help="min HO SNPs for projected ancients")
     ap.add_argument("--out", required=True)
@@ -208,6 +262,11 @@ def main() -> None:
         targets.append(lab)
         tvec.append(g)
         print(f"target {lab}: {int((g != 3).sum())} panel SNPs (flipped {flips}, ambiguous skipped {amb}, unmatched {bad})")
+    for ep in a.extra_plink:
+        labs, mat = read_plink(ep, snp_index, a1, a2, nsnp)
+        targets.extend(labs)
+        tvec.extend(mat)
+
     T = np.array(tvec) if tvec else np.zeros((0, nsnp), np.int8)
     At = np.zeros((len(targets), K * K))
     bt = np.zeros((len(targets), K))
@@ -277,7 +336,9 @@ def main() -> None:
         for pname, v in sorted(by_pop.items()):
             f.write(f"{pname}\t{min(len(v), a.cap)}\n")
     msg = (f"basis {nb} individuals / {len(by_pop)} populations; SNPs {M}; projected {nproj}; "
-           f"targets {', '.join(targets)}; PC1-3 variance share "
+           # collapse repeats: --extra-plink adds hundreds of rows sharing one label
+           f"targets {', '.join(f'{t}x{n}' if n > 1 else t for t, n in Counter(targets).items())}; "
+           f"PC1-3 variance share "
            f"{', '.join(f'{lam[k]/np.trace(gram):.4f}' for k in range(3))}; "
            f"max |projected - direct| basis score deviation {dev:.2e}")
     open(os.path.join(a.out, "summary.txt"), "w").write(msg + "\n")

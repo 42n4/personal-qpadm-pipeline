@@ -19,6 +19,7 @@ genotypes, file names or genealogy belong in this repository.
 
 **Results — read before any new analysis, do not re-derive:**
 `aadr/examples/PW_WGS_aadr.md` (WGS, sets 1–4, pair test, PCA),
+`aadr/examples/PW_WGS_aadr_gretzinger.md` (sets 5-6 + Gretzinger 2025 PCA),
 `aadr/examples/PW_JW_arrays_aadr.md` (arrays, set 1),
 `aadr_eu/examples/AM_FF_aadr_eu.md` (AM, aadr_eu).
 
@@ -78,8 +79,13 @@ aadr/
   set2/                      ancient outgroups: build f2, outgroup f3, distal, rotating qpAdm, f4 scan
   set3/                      medieval Polish regions by site (strict coverage mode)
   set4/                      pre-medieval candidates only (pops.R for the set-2 scripts)
+  set5/                      set 4 + Ukrainian forest-steppe / Chernyakhiv-era candidates;
+                             30_trzciniec_tests.R (f4 scan, Gustorzyn split, qpAdm, 3-source)
+  set6/                      40_add_external.R: merge an external PLINK package (Poseidon)
+                             into a set-N fileset, then SET=set6 runs the set-5 tests
   pair_compare.R             two targets on shared SNPs (qpWave clade, f4 scan, distal)
-  pca/                       own 25-PC PCA (30_build_pca.py) + mapping to G25 catalogue ids (32)
+  pca/                       own 25-PC PCA (30_build_pca.py; --extra-plink projects every
+                             individual of a PLINK set) + mapping to G25 catalogue ids (32)
   examples/                  result reports + README_commands.md (full command history)
 aadr_eu/
   00-03                      same as aadr/
