@@ -10,9 +10,9 @@
 # person's conversion run self-contained and lets you run multiple people's
 # files against the same AADR install without them colliding.
 #
-#   Example: running from /home/pwas with
+#   Example: running from /home/user with
 #somewhere/MyHeritage_PW_raw_dna_data.csv
-#   creates:  /home/pwas/MyHeritage_PW/  (outdir = CSV basename, minus
+#   creates:  /home/user/MyHeritage_PW/  (outdir = CSV basename, minus
 #             extension and common raw-data suffixes, under CWD)
 #
 # KNOWN PITFALLS THIS SCRIPT AVOIDS (discovered the hard way in the original

@@ -25,7 +25,7 @@
 # (G25 label) instead of 40% Germany_AI -> test whether AADR Avar / Hun
 # populations are real ancestry sources or geometric artefacts.
 #
-# Usage (run from ~/Claude or any writable dir):
+# Usage (run from the repository root or any writable dir):
 #   Rscript aadr/07_extended_models.R \
 #     ./FF_PW/merged_pw_aadr_final_ready \
 #     /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB \
@@ -221,6 +221,24 @@ if (length(extra_needed) == 0L) {
                  paste0(extra_stem, ".fam"),
     "--make-bed", "--out", ext_prefix
   ))
+  miss <- paste0(ext_prefix, "-merge.missnp")
+  if (ret != 0L && file.exists(miss)) {
+    # A target allele that disagrees with the AADR pair (array miscall, not a
+    # strand flip: A/C vs T/C) aborts --bmerge with "3+ alleles". Drop those
+    # SNPs from both sides and merge again -- same rule as step 3d.
+    cat(sprintf("  %d allele conflict(s) excluded, merging again\n", length(readLines(miss))))
+    for (p in c(merged_prefix, extra_stem)) {
+      ret <- system2("plink2", c("--bfile", p, "--exclude", miss, "--make-bed",
+                                 "--out", paste0(ext_prefix, "_x", basename(p))))
+      if (ret != 0L) stop("plink2 --exclude failed for ext7")
+    }
+    xb <- paste0(ext_prefix, "_x", basename(extra_stem))
+    ret <- system2("p-link", c(
+      "--bfile",   paste0(ext_prefix, "_x", basename(merged_prefix)),
+      "--bmerge",  paste0(xb, c(".bed", ".bim", ".fam")),
+      "--make-bed", "--out", ext_prefix
+    ))
+  }
   if (ret != 0L) stop("p-link --bmerge failed for ext7")
 
   # Fix FID: individual IDs -> population labels
@@ -245,8 +263,12 @@ dir.create(f2_dir, recursive = TRUE, showWarnings = FALSE)
 
 cat("--- Computing f2 (single pass for all populations) ---\n")
 cat(sprintf("  Populations: %s\n", paste(all_pops_f2, collapse = ", ")))
+# maxmem forces block-splitting of the f2 pass (same results, chunked), as in
+# step 08. It does NOT bound the whole step: on WGS the per-SNP character PED
+# matrix built above dominates RAM (peak 43.7 GB on HO, 51.3 GB on 1240K,
+# 2026-10-21) -- never run this next to another heavy job on a 64 GB host.
 extract_f2(ext_prefix, pops = all_pops_f2, outdir = f2_dir,
-           overwrite = TRUE, format = "plink")
+           overwrite = TRUE, format = "plink", maxmem = 1000)
 cat("\n")
 
 # ---- Run 1-source qpAdm for each candidate ----

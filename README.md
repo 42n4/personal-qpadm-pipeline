@@ -1,23 +1,26 @@
-# AADR / qpAdm Ancestry Analysis Pipeline — Beginner's Guide
+# personal-qpadm-pipeline — qpAdm ancestry analysis of a personal genome against AADR
 
-> **Which variant do I want?** This `aadr/` pipeline is tuned for **Poland and
-> its neighbours** (Slavic / Baltic / Central-East European ancestry) — its
-> candidate populations are Polish, Slavic, Baltic, Lusatian and steppe sources.
-> For **Western/Central European or US (admixed) genomes**, use the sibling
-> `../aadr_eu/` instead: it adds British/Anglo-Saxon, continental Germanic,
-> Gaulish/French, Italic/Roman and Iberian reference populations. Note that
-> `aadr_eu/` is at an **early stage** (only the prep steps 00–03 and the
-> EU-expanded scans 07–08), whereas `aadr/` is the mature, full pipeline.
+This pipeline analyses your personal DNA (a consumer array file or a WGS CRAM)
+against thousands of ancient genomes from the Allen Ancient DNA Resource (AADR)
+using **qpAdm** and other f-statistics. The result tells you which ancient
+populations are statistically compatible with your ancestry, and which are not.
 
-This pipeline analyses your personal DNA (from a consumer test kit) against
-thousands of ancient genomes from the AADR database using **qpAdm** — a
-formal statistical method based on f-statistics (allele frequency correlations).
-The result tells you which ancient populations are statistically compatible
-with your ancestry, and which are not.
+This is a different, more rigorous approach than G25/nMonte (geometric distance).
+qpAdm works on allele frequencies and can tell genuine shared ancestry from
+geometric coincidence — provided the outgroups can see the difference (§3, set 1 vs set 2).
 
-This is a different, more rigorous approach than G25/nMonte (geometric
-distance). qpAdm works on raw allele data and can distinguish genuine shared
-ancestry from geometric coincidence.
+**Two variants, one code base:**
+
+| Directory | For | Steps |
+|---|---|---|
+| `aadr/` | Poland and neighbours (Slavic, Baltic, Lusatian, Wielbark, Przeworsk, steppe sources) | 00–09 (set 1), 01b (WGS), set 2/3/4, pair test, own PCA |
+| `aadr_eu/` | Western/Central European or admixed (e.g. US) targets | 00–03, 07, 08 with an added West/Central-European batch |
+
+> **AADR v66.p1 warning.** Its `.geno` files are in the transposed TGENO format,
+> which admixtools 2.0.10 decodes silently into garbage. Convert them first (§2).
+> Every result this repository published before 2026-10-22 was computed on
+> mis-decoded data; the reports in `aadr/examples/` and `aadr_eu/examples/` are
+> the corrected reruns.
 
 ---
 
@@ -63,264 +66,223 @@ Download via: **DNA** → **"Settings"** → **"Download DNA Raw Data"**
 
 > **Tip:** If you have results from multiple providers for the same person,
 > run step 01 separately for each, then merge with step 00 before continuing.
-> See `README_commands.md` for the merge workflow.
+> See `aadr/examples/README_commands.md` for the merge workflow.
 
 ---
 
 ## 2. Prerequisites — software and data
 
-Everything below must already be installed. On Gentoo with overlay `pwr`:
-
 ```bash
-# R packages
+# R package
 Rscript -e 'remotes::install_github("uqrmaie1/admixtools")'
 
-# Tools
+# Tools (Gentoo, overlay pwr; other distros: install plink2, plink 1.9, bcftools)
 sudo emerge sci-biology/plink2-bin   # binary: plink2
-sudo emerge sci-biology/plink        # binary: p-link  (v1.90b7+, overlay pwr)
+sudo emerge sci-biology/plink        # binary: p-link  (plink 1.9, v1.90b7+)
+sudo emerge sci-biology/bcftools     # only for WGS input (step 01b)
 
-# AADR v66.p1 HO dataset — ~30 GB download, stored read-only
-# Download from Harvard Dataverse: doi:10.7910/DVN/FFIDCW
-# Place at: /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB.{geno,snp,ind,anno}
-ls /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB.geno   # should exist
+# AADR v66.p1 HO (and optionally 1240K) — Harvard Dataverse doi:10.7910/DVN/FFIDCW
+# The .geno files are TGENO. Convert once (HO: ~2.5 min), symlink the rest:
+mkdir -p /data/aadr/v66.p1/geno && cd /data/aadr/v66.p1/geno
+python3 -I /path/to/personal-qpadm-pipeline/aadr/tgeno2geno.py \
+    ../v66.p1_HO.aadr.patch.PUB.geno v66.p1_HO.aadr.patch.PUB.geno
+ln -s ../v66.p1_HO.aadr.patch.PUB.snp ../v66.p1_HO.aadr.patch.PUB.ind ../v66.p1_HO.aadr.PUB.anno .
+head -c 6 v66.p1_HO.aadr.patch.PUB.geno     # must print GENO, never TGENO
+
+export AADR=/data/aadr/v66.p1/geno/v66.p1_HO.aadr.patch.PUB   # used below
 ```
 
 ---
 
-## 3. Run the pipeline
+## 3. Run the pipeline (`aadr/`)
 
-**Replace `NN` with your own short identifier throughout** (2–4 letters,
-no spaces, e.g. `AB`, `ANNA`, `JOHN`). This becomes your sample label in all
-output tables.
+Replace `NN` with your own short label (2–4 letters). Run everything from the
+repository root: run directories (`./NN_FF`, `./NN_WGS_HO` ...) are created there
+and are git-ignored.
 
-Run all commands from `~/Claude` (or wherever this repo lives):
-
-```bash
-cd ~/Claude
-```
-
-### Step 01 — Convert raw CSV to PLINK format
+### Step 01 — raw CSV to PLINK
 
 ```bash
-# FTDNA Family Finder:
-SAMPLE_ID=NN ./aadr/01_prepare_files.sh /path/to/your_ftdna_rawdata.csv NN_FF
-
-# MyHeritage:
+SAMPLE_ID=NN ./aadr/01_prepare_files.sh /path/to/your_ftdna_rawdata.csv NN_FF   # FTDNA
 SAMPLE_ID=NN ./aadr/01_prepare_files.sh /path/to/MyHeritage_raw_dna_data.csv NN_MH
 ```
 
-- `SAMPLE_ID=NN` — sets your label (used in .fam file and all later outputs)
-- Second argument (`NN_FF` / `NN_MH`) — name of the output directory
-- Output: `./NN_FF/pw_plink.{bed,bim,fam}` — your genome in PLINK format
+Two arrays of the same person can be union-merged with `00_merge_arrays.sh`
+(see `aadr/examples/README_commands.md`); it does not add usable SNPs.
 
-### Step 02 — Build AADR population subset
-
-```bash
-Rscript aadr/02_build_aadr_subset.R \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB \
-    ./NN_FF
-```
-
-- Reads AADR, extracts the ~23 reference populations needed for analysis
-- Memory-safe: does NOT load the full 129 GB panel — uses `pops=` filter
-- Output: `./NN_FF/aadr_subset.{bed,bim,fam}` + `aadr_subset_pop_lookup.tsv`
-- Runtime: ~5–10 minutes
-
-### Step 03 — Merge personal genome with AADR subset
+### Step 01b — WGS instead of a CSV *(CRAM/BAM, GRCh37)*
 
 ```bash
-./aadr/03_merge_and_test.sh ./NN_FF NN
+REF=/path/GRCh37.primary_assembly.genome.fa.bgz JOBS=16 SAMPLE_ID=NN \
+  ./aadr/01b_prepare_wgs.sh /path/NN.cram $AADR NN_WGS_HO
 ```
 
-- Second argument must match your `SAMPLE_ID` from step 01
-- Merges your ~520K SNPs with AADR HO panel → ~41–50K overlapping SNPs
-  *(this is expected and normal — not a bug)*
-- Output: `./NN_FF/merged_pw_aadr_final_ready.{bed,bim,fam}`
-- Runtime: ~5–15 minutes
+- Genotypes the reads at the panel's autosomal SNPs only (bcftools mpileup + call),
+  so steps 02–09 run unchanged. Give step 02 the same AADR prefix.
+- `REF` must be the FASTA the CRAM was aligned to; contig lengths are checked.
+- Filters: `MIN_DP=8 MAX_DP=100 MIN_GQ=20 MIN_MQ=20 MIN_BQ=20` (env overrides).
+- 30x WGS: ~579K of 580K HO sites typed in ~7 min with 16 jobs.
+- Do not use the provider's variant-only VCF: it cannot tell hom-ref from missing.
 
-### Step 04 — Germany_IA artefact test
+### Steps 02–03 — AADR subset and merge
 
 ```bash
-Rscript aadr/04_run_qpadm_test.R \
-    ./NN_FF/merged_pw_aadr_final_ready NN
+Rscript aadr/02_build_aadr_subset.R $AADR ./NN_FF
+./aadr/03_merge_and_test.sh ./NN_FF NN          # 2nd argument = your SAMPLE_ID
 ```
 
-- Tests whether Germany_IA appears as a genuine ancestry source or a proxy artefact
-- Established result for Slavic/Polish ancestry: Germany_IA is **always an artefact**
-  (shared Corded Ware substrate, not Iron Age Germanic ancestry)
-
-### Step 05 — Robustness check across outgroup combinations
+### Set 1 — steps 04–09 (outgroups Mbuti, Yoruba, Han)
 
 ```bash
-Rscript aadr/05_robustness_outgroups.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
+M=./NN_FF/merged_pw_aadr_final_ready
+Rscript aadr/04_run_qpadm_test.R      $M NN          # Germany/Corded Ware component test
+Rscript aadr/05_robustness_outgroups.R $M $AADR NN   # the same over 6 outgroup sets
+Rscript aadr/06_ancestry_models.R ./NN_FF/merged_pw_aadr_extended $AADR NN   # Poland_* models
+Rscript aadr/07_extended_models.R     $M $AADR NN    # 38 single sources outside Poland_*
+Rscript aadr/08_two_source.R          $M $AADR NN    # rotating 2-source scan
+Rscript aadr/09_przeworsk_channel.R   $M $AADR NN    # Przeworsk vs Wielbark (optional)
 ```
 
-- Repeats the Germany_IA test with 6 different outgroup combinations
-- Confirms the artefact conclusion is stable, not outgroup-dependent
+Set 1 rejects sources with gross non-European or early-farmer excess. It
+**cannot rank European sources**: the three modern outgroups see Europe as
+nearly one point, so dozens of European sources "fit" at once.
 
-### Step 06 — Ancestry models (Polish reference populations)
+### Set 2 — ancient outgroups (the comparisons that discriminate)
 
 ```bash
-Rscript aadr/06_ancestry_models.R \
-    ./NN_FF/merged_pw_aadr_extended \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
+for s in 10_build_f2 11_outgroup_f3 12_distal 13_rotating 14_f4_scan; do
+  Rscript aadr/set2/$s.R $M $AADR NN || break; done
 ```
 
-- Tests 16 models: single-source and two/three-source combinations
-  using Polish medieval and Iron Age populations
-- Output TSV: `./NN_FF/06_ancestry_models_NN.tsv`
+Outgroup f3, distal WHG/Steppe/EEF, rotating qpAdm (unused candidates become
+outgroups) and an f4 scan. Population lists: `aadr/set2/pops.R`. Details:
+`aadr/set2/README.md`.
 
-### Step 07 — Extended models (non-Polish references)
+### Set 3 — medieval Polish regions; Set 4 — pre-medieval sources only
 
 ```bash
-Rscript aadr/07_extended_models.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
+Rscript aadr/set3/20_build_f2.R $M $AADR NN && Rscript aadr/set3/21_region_tests.R $M $AADR NN
+export POPS_FILE=$PWD/aadr/set4/pops.R     # set 4 = the set-2 scripts with this list
+for s in 10_build_f2 11_outgroup_f3 12_distal 13_rotating 14_f4_scan; do
+  Rscript aadr/set2/$s.R $M $AADR NN || break; done
+unset POPS_FILE
 ```
 
-- Tests 23 single-source models: Slavic, Baltic, Lusatian culture,
-  Pannonian Avars, Huns, Sarmatians, Steppe Bulgars, Xiongnu
-- Identifies the best single-source ancient match for your ancestry
-- Established result: **Ukraine_IA_Lusatian** is the best fit for
-  Polish/Slavic ancestry (p ≈ 0.86–0.96)
-- Output TSV: `./NN_FF/07_extended_models_NN.tsv`
+See `aadr/set3/README.md` and `aadr/set4/README.md`.
 
-### Step 08 — Two-source rotating scan (hidden components)
+### Two targets on shared SNPs; own PCA
 
 ```bash
-Rscript aadr/08_two_source.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
+Rscript aadr/pair_compare.R <set3_or_set4_prefix> NN /path/other/pw_plink XX $AADR ./NN_vs_XX
+python3 -I aadr/pca/30_build_pca.py --prefix $AADR --anno ${AADR%.patch.PUB}.PUB.anno \
+    --target NN=./NN_WGS_HO/pw:wgs --relabel aadr/pca/relabel_regions.tsv --out ./NN_WGS_HO/pca
 ```
 
-- Takes the best single-source fit and tests 23 diverse second sources
-  (Uralic, Siberian, Steppe, Hunnic, Middle Eastern, Caucasian)
-- Detects whether a hidden ancestry component exists beyond the Slavic baseline
-- Verdict `SIGNIFICANT-2src` = real additional component found
-- Verdict `UNIDENTIFIABLE` = model numerically unstable (not a finding)
-- Established result: **0 significant two-source models** for Polish ancestry
-  → no hidden Avar/steppe/Asian admixture
-- Output TSV: `./NN_FF/08_two_source_NN.tsv`
+`30_build_pca.py` builds a 25-PC West-Eurasian PCA from AADR moderns (smartpca-style
+normalisation) and projects ancients and targets by least squares (lsqproject).
+Its distances agree with Davidski's G25 at r = 0.95. `32_to_g25_centroids.py`
+turns it into centroids for a G25-style nMonte runner.
 
-### Step 09 — Przeworsk vs Wielbark channel test *(Polish Iron Age, optional)*
-
-```bash
-Rscript aadr/09_przeworsk_channel.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
-```
-
-- Tests whether your ancestry passed through the **Przeworsk** or the
-  **Wielbark** Iron Age culture channel (relevant for a Greater-Poland /
-  Wielkopolska genealogical background)
-- Combines three probes: 1-source p-value per channel, an **f4 symmetry test**
-  (B1 — are the two channels distinguishable at all? B2 — which channel does
-  your genome favour?), and a 2-source model on a Lusatian base
-- Admits `Poland_IA_Przeworsk` (n=2, skipped by steps 6–7's n≥3 gate)
-- Established result: **UNRESOLVED but consistent** — the two channels are
-  statistically indistinguishable at ~40K SNP (f4 B1 non-significant), both
-  targets show symmetric affinity (f4 B2 non-significant); Przeworsk has the
-  highest single-source p of the Polish IA sources. Needs WGS to resolve.
-- Output TSV: `./NN_FF/przeworsk_channel_results_NN.tsv`,
-  `./NN_FF/przeworsk_channel_f4_NN.tsv`
+**WGS: run set 1 on HO** (1240K lacks 14 of the modern labels the scripts use); run
+sets 2–4 on HO and 1240K and trust only what holds on both.
 
 ---
 
-## 4. Full command sequence at a glance
+## 4. The `aadr_eu/` variant
+
+Same steps 00–03; then:
 
 ```bash
-cd ~/Claude
-
-# -- replace NN with your label, and update the CSV path --
-SAMPLE_ID=NN ./aadr/01_prepare_files.sh /path/to/rawdata.csv NN_FF
-
-Rscript aadr/02_build_aadr_subset.R \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB ./NN_FF
-
-./aadr/03_merge_and_test.sh ./NN_FF NN
-
-Rscript aadr/04_run_qpadm_test.R \
-    ./NN_FF/merged_pw_aadr_final_ready NN
-
-Rscript aadr/05_robustness_outgroups.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
-
-Rscript aadr/06_ancestry_models.R \
-    ./NN_FF/merged_pw_aadr_extended \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
-
-Rscript aadr/07_extended_models.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
-
-Rscript aadr/08_two_source.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
-
-# Step 09 is optional (Polish Iron Age channel test):
-Rscript aadr/09_przeworsk_channel.R \
-    ./NN_FF/merged_pw_aadr_final_ready \
-    /usr/local/share/aadr/v66.p1_HO.aadr.patch.PUB NN
+Rscript aadr_eu/07_extended_models.R ./NN_FF/merged_pw_aadr_final_ready $AADR NN
+Rscript aadr_eu/08_two_source.R     ./NN_FF/merged_pw_aadr_final_ready $AADR NN
 ```
+
+- Adds England IA/Saxon/Medieval, Ireland, Netherlands, Germany (Alt-Inden),
+  Hungary Lombards, France IA, Italy Roman/Piceni, Spain IA/EBA, and modern
+  English, French, Italian_North, Spanish, Orcadian and Icelandic, to every `aadr/` population.
+- Right set = Mbuti, Yoruba, Han, Papuan, Karitiana.
+- Step 08 uses a strict `SIGNIFICANT-2src` rule: base n ≥ 15, improvement over the
+  base, both weights in 0.1–0.9, |z| > 3 and a Benjamini-Hochberg `q_second < 0.05`.
+- For an admixed target, check the continents:
+  `Rscript aadr_eu/07b_continental_f3.R ./NN_FF/merged_pw_aadr_final_ready NN` (after 07)
+  computes f3(NN; West European, X) for X = Yoruba, Han, Karitiana, Papuan.
+  A negative estimate with z < −3 means real admixture with X; then the Europe-only
+  left panel cannot model the target.
+- Public genomes to try: PGP-HMS (`aadr_eu/examples/site.txt`).
+- Peak RAM: ~52 GB on HO (the PED matrix of the extra populations).
 
 ---
 
-## 5. What to look at in the results
+## 5. Reading the results
 
 | File | What it shows |
 |------|---------------|
-| `NN_FF/06_ancestry_models_NN.tsv` | Best Polish-population models, p-values |
-| `NN_FF/07_extended_models_NN.tsv` | Best single-source match across 23 populations; sort by `p` descending |
-| `NN_FF/08_two_source_NN.tsv` | Whether a second hidden ancestry component exists |
-| `NN_FF/przeworsk_channel_results_NN.tsv` | Przeworsk vs Wielbark Iron Age channel (step 09, optional) |
-| `NN_FF/przeworsk_channel_f4_NN.tsv` | f4 symmetry stats for the channel test (step 09) |
+| `NN_FF/ancestry_models_results.tsv` | step 06, Poland_* models |
+| `NN_FF/extended_models_results.tsv` | step 07, single sources |
+| `NN_FF/two_source_results_NN.tsv` | step 08, second components |
+| `NN_FF/przeworsk_channel_*_NN.tsv` | step 09 |
+| `NN_FF/set2/*.tsv`, `set3/`, `set4/` | sets 2–4 |
 
-**Reading the p-value:** A model is compatible with your data when `p > 0.05`.
-Higher p = better fit (the model cannot be statistically rejected). The best
-single-source fit typically has `p > 0.5` for Polish/Slavic ancestry.
-
-**Reading the verdict column (steps 6–8):**
-- `PASS` — model fits, p > 0.05
-- `REJECT` — model rejected, p < 0.05
-- `SIGNIFICANT-2src` — real second component detected (step 08 only)
-- `UNIDENTIFIABLE` — weights numerically unstable; not a meaningful finding
+- A model is compatible with the data when `p > 0.05`. A higher p is **not** a
+  better ancestry match; compare sources only inside a design that can reject them.
+- `UNIDENTIFIABLE` (step 08, set 2): the model fits but a weight SE is large —
+  the sources are collinear and any weights fit. Not a finding.
+- `OK-unphysical`: one weight is negative — collinear sources.
+- `SIGNIFICANT-2src`: a real second component (step 08).
 
 ---
 
-## 6. Example results (PW and JW reference runs)
+## 6. Example results: PW, JW (Polish), AM (US public genome)
 
-See the canonical analysis reports for two existing runs:
+Short labels only; no personal data is in this repository.
 
-- `aadr/PW_FF_slavic_aadr.md` — FTDNA Family Finder, western Mazovia background
-- `aadr/JW_MH_slavic_aadr.md` — MyHeritage, Podlasie/Uniate-Ruthenian background
+- `aadr/examples/PW_WGS_aadr.md` — PW 30x WGS: sets 1–4, PW vs JW, own PCA.
+- `aadr/examples/PW_JW_arrays_aadr.md` — PW (FTDNA) and JW (MyHeritage) arrays, set 1.
+- `aadr_eu/examples/AM_FF_aadr_eu.md` — AM (PGP-HMS FTDNA file), aadr_eu.
+
+In brief:
+- On arrays, set 1 rejects only East-Asian/Siberian, Near-Eastern, Ashkenazi and
+  pure early-farmer sources. It finds no hidden second component and no separate
+  Germany/Corded Ware component. It cannot choose among European sources.
+- On WGS with ancient outgroups, PW fits early medieval Poland: Poland_IA
+  (= Piast-era 900–1200 CE despite the label), Poland_EarlySlav,
+  Poland_EarlyMedieval_Slav, and also Lithuania_LBA. It rejects the Volhynian
+  Lusatians, Wielbark, Przeworsk, Trzciniec and Corded Ware as sole sources.
+  Regionally, Greater Poland, Masovia and Lubusz fit, while Silesia and Kuyavia do
+  not. With pre-medieval sources only, PW needs two: East-Baltic LBA ~30–45 % plus
+  Central/Northern European IA.
+- PW and JW are indistinguishable on their shared SNPs.
+- AM (US, PGP-HMS) is European with no detectable admixture from another continent.
+  A continental North-West European early-medieval source (Germany_AltInden) fits
+  alone, while British, French IA, Iberian and Slavic bases are rejected alone. That is a lead
+  from modern outgroups only.
 
 ---
 
-## 7. Expected runtimes and SNP counts
+## 7. Runtimes, memory and SNP counts (HO panel, 16 cores, 64 GB RAM)
 
-| Step | Runtime | Notes |
-|------|---------|-------|
-| 01 | < 1 min | CSV conversion |
-| 02 | 5–10 min | AADR subset extraction |
-| 03 | 5–15 min | Merge; yields ~41–50K SNPs (normal for consumer arrays) |
-| 04–05 | 5–10 min each | f2 + qpAdm tests |
-| 06–07 | 10–20 min each | f2cache built on first run, reused on re-run |
-| 08 | 20–40 min | 46 two-source models |
-| 09 | 10–20 min | optional; 1-source + f4 symmetry + 2-source channel test |
+| Step | Array target | 30x WGS target |
+|------|---------|---------|
+| 01 / 01b | < 1 min | ~7 min (JOBS=16) |
+| 02 | ~1.5 min, 8 GB | same |
+| 03–06 | ≤ 2 min each, ≤ 12 GB | a few min each |
+| 07 | ~4 min, 36 GB (aadr_eu ~9 min, 52 GB) | similar |
+| 08 | ~4 min, 32 GB (aadr_eu ~7 min, 48 GB) | similar |
+| 09 | < 1 min | a few min |
 
-**~41–50K SNPs after merge is correct and expected.** Consumer arrays cover
-~520–560K positions; AADR HO has 584K; physical overlap ~57K; after
-`maxmiss=0` across all ancient samples → 41–50K. Not a bug.
+- Consumer arrays type ~57K of the 584K HO sites. After `maxmiss=0` across the
+  ancient groups, 20–57K SNPs remain, depending on the step. This is expected, not a bug.
+- 30x WGS types ~579K HO sites; after `maxmiss=0`, set 2 keeps ~47K (HO) / ~82K
+  (1240K). The limit is now the sparse ancient genomes.
 
 ---
 
 ## 8. Developer reference
 
-For the full command history, pitfall documentation, and platform-merge
-workflow (FTDNA + MyHeritage union), see `aadr/README_commands.md`.
+- `CLAUDE.md` — pitfalls (all pre-fixed in the scripts), label traps, findings,
+  conventions. Shared by both variants.
+- `aadr/examples/README_commands.md` — full command history, including the
+  array-merge workflow.
 
 ## 9. Acknowledgements
 

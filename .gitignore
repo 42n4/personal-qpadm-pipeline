@@ -1,0 +1,42 @@
+# Deny by default: the repo root doubles as the working directory for runs
+# (./PW_FF, ./JW_MH, ./PW_WGS_HO, ./NN_FF ... with PLINK filesets, f2 caches,
+# result TSVs and personal genotypes, several GB each). Only the pipeline code
+# and its documentation are published; re-include new top-level paths by name.
+/*
+!/.gitignore
+!/LICENSE
+!/README.md
+!/CLAUDE.md
+!/aadr/
+!/aadr_eu/
+
+# Never inside the code directories either: run outputs started from a
+# subdirectory, personal genotypes, AADR copies, Python byte code.
+__pycache__/
+*.pyc
+*_f2cache/
+*_f2/
+*.bed
+*.bim
+*.fam
+*.ped
+*.map
+*.pgen
+*.pvar
+*.psam
+*.geno
+*.snp
+*.ind
+*.anno
+*.log
+*.nosex
+*.snplist
+*.missnp
+*.vcf
+*.vcf.gz
+*.cram
+*.crai
+*.bam
+*.bai
+*.csv
+*.zip

@@ -59,6 +59,23 @@ right_sets <- list(
   "Mbuti+Han (2 outgroups)"      = c("Mbuti", "Han")
 )
 
+# ---- Panel-dependent outgroups ----
+# The 1240K panel (v66.p1) has no Nganasan at all; HO has n=33. Drop any extra
+# outgroup the panel lacks, together with the combinations that use it, instead
+# of stopping -- on HO nothing is dropped and the run is unchanged.
+panel_pops <- unique(read.table(paste0(aadr_prefix, ".ind"),
+                                stringsAsFactors = FALSE)[[3]])
+absent_extra <- setdiff(extra_right_pops, panel_pops)
+if (length(absent_extra) > 0) {
+  cat(sprintf("  WARNING: not in this AADR panel, skipped: %s\n",
+              paste(absent_extra, collapse = ", ")))
+  extra_right_pops <- setdiff(extra_right_pops, absent_extra)
+  dropped <- names(right_sets)[vapply(right_sets,
+                                      function(x) any(x %in% absent_extra), logical(1))]
+  right_sets <- right_sets[!names(right_sets) %in% dropped]
+  cat(sprintf("  WARNING: outgroup sets dropped: %s\n\n", paste(dropped, collapse = "; ")))
+}
+
 all_right_pops <- unique(unlist(right_sets))
 
 # ---- Check which extra pops need to be extracted ----
